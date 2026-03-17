@@ -10,9 +10,6 @@ api.interceptors.request.use(cfg => {
   return cfg;
 });
 
-// ============================================================
-// HOOKS
-// ============================================================
 function useAuth() {
   const [user, setUser] = useState(() => {
     const u = localStorage.getItem("user");
@@ -44,12 +41,20 @@ function useGame() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
   const [startTime, setStartTime] = useState(null);
-  const cargarCategorias = useCallback(async () => { const { data } = await api.get("/categorias"); setCategorias(data); }, []);
+  const [recs, setRecs] = useState([]);
+
+  const cargarCategorias = useCallback(async () => {
+    const { data } = await api.get("/categorias");
+    setCategorias(data);
+  }, []);
+
   const iniciar = async (categoria_id) => {
     setLoading(true);
     const { data } = await api.post("/sesiones/iniciar", { categoria_id });
-    setSesion(data); setResultado(null); setHistorial([]); setSelected(null); setStartTime(Date.now()); setLoading(false);
+    setSesion(data); setResultado(null); setHistorial([]);
+    setSelected(null); setStartTime(Date.now()); setRecs([]); setLoading(false);
   };
+
   const responder = async (opcion_id) => {
     if (resultado || !sesion) return;
     const tiempo_ms = startTime ? Date.now() - startTime : null;
@@ -58,15 +63,24 @@ function useGame() {
     setResultado(data);
     setSesion(prev => ({ ...prev, puntuacion: data.puntuacion_total, dificultad_actual: data.dificultad_actual, preguntas_respondidas: prev.preguntas_respondidas + 1 }));
     setHistorial(prev => [...prev, { pregunta: sesion.pregunta_actual?.enunciado, correcta: data.es_correcta, puntos: data.puntos_obtenidos, dificultad: sesion.dificultad_actual }]);
+    if (data.sesion_completada) {
+      try {
+        const r = await api.get(`/sesiones/${sesion.sesion_id}/recomendaciones`);
+        setRecs(r.data.recomendaciones || []);
+      } catch (e) { setRecs([]); }
+    }
   };
+
   const siguiente = async () => {
     if (!sesion) return;
     setLoading(true);
     const { data } = await api.get(`/sesiones/${sesion.sesion_id}/siguiente`);
     setSesion(data); setResultado(null); setSelected(null); setStartTime(Date.now()); setLoading(false);
   };
-  const resetGame = () => { setSesion(null); setResultado(null); setHistorial([]); setSelected(null); };
-  return { categorias, sesion, resultado, historial, loading, selected, cargarCategorias, iniciar, responder, siguiente, resetGame };
+
+  const resetGame = () => { setSesion(null); setResultado(null); setHistorial([]); setSelected(null); setRecs([]); };
+
+  return { categorias, sesion, resultado, historial, loading, selected, recs, cargarCategorias, iniciar, responder, siguiente, resetGame };
 }
 
 function useAdmin() {
@@ -124,9 +138,6 @@ function useStats() {
   return { sesiones, loading, cargarSesiones, calcularStats };
 }
 
-// ============================================================
-// ICONOS DE CATEGORÍA
-// ============================================================
 const catIcons = { "Programación": "💻", "Matemáticas": "📐", "Historia": "🏛️", "Ciencias": "🔬", "Ciencias Naturales": "🌿", "Inglés": "🌎", "Lenguaje": "📝" };
 const getCatIcon = (nombre) => catIcons[nombre] || "📚";
 const catColors = [
@@ -138,9 +149,6 @@ const catColors = [
   { bg: "#e0f2fe", border: "#06b6d4", text: "#0e7490" },
 ];
 
-// ============================================================
-// VISTAS
-// ============================================================
 function AuthView({ onAuth }) {
   const [modo, setModo] = useState("login");
   const [nombre, setNombre] = useState("");
@@ -148,7 +156,6 @@ function AuthView({ onAuth }) {
   const [password, setPassword] = useState("Admin123");
   const [error, setError] = useState("");
   const { login, register } = onAuth;
-
   const submit = async (e) => {
     e.preventDefault(); setError("");
     try {
@@ -156,7 +163,6 @@ function AuthView({ onAuth }) {
       else { if (!nombre.trim()) { setError("El nombre es requerido"); return; } await register(nombre, correo, password); }
     } catch (err) { setError(err.response?.data?.detail || "Error de autenticación"); }
   };
-
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
       <div style={{ background: "#fff", borderRadius: "24px", padding: "2.5rem", boxShadow: "0 25px 60px rgba(0,0,0,0.3)", width: "100%", maxWidth: "420px" }}>
@@ -165,22 +171,19 @@ function AuthView({ onAuth }) {
           <h1 style={{ margin: 0, fontSize: "1.8rem", fontWeight: "900", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>QuizMaster IA</h1>
           <p style={{ margin: "0.4rem 0 0", color: "#6b7280", fontSize: "0.9rem" }}>Sistema de quizzes adaptativos con IA</p>
         </div>
-
         <div style={{ display: "flex", background: "#f3f4f6", borderRadius: "12px", padding: "4px", marginBottom: "1.5rem" }}>
-          <button style={{ flex: 1, padding: "0.6rem", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "600", fontSize: "0.9rem", transition: "all 0.2s", background: modo === "login" ? "#fff" : "transparent", color: modo === "login" ? "#6366f1" : "#6b7280", boxShadow: modo === "login" ? "0 2px 8px rgba(0,0,0,0.1)" : "none" }} onClick={() => setModo("login")}>Iniciar sesión</button>
-          <button style={{ flex: 1, padding: "0.6rem", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "600", fontSize: "0.9rem", transition: "all 0.2s", background: modo === "register" ? "#fff" : "transparent", color: modo === "register" ? "#6366f1" : "#6b7280", boxShadow: modo === "register" ? "0 2px 8px rgba(0,0,0,0.1)" : "none" }} onClick={() => setModo("register")}>Registrarse</button>
+          <button style={{ flex: 1, padding: "0.6rem", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "600", fontSize: "0.9rem", background: modo === "login" ? "#fff" : "transparent", color: modo === "login" ? "#6366f1" : "#6b7280", boxShadow: modo === "login" ? "0 2px 8px rgba(0,0,0,0.1)" : "none" }} onClick={() => setModo("login")}>Iniciar sesión</button>
+          <button style={{ flex: 1, padding: "0.6rem", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "600", fontSize: "0.9rem", background: modo === "register" ? "#fff" : "transparent", color: modo === "register" ? "#6366f1" : "#6b7280", boxShadow: modo === "register" ? "0 2px 8px rgba(0,0,0,0.1)" : "none" }} onClick={() => setModo("register")}>Registrarse</button>
         </div>
-
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {modo === "register" && <input style={s.input} placeholder="👤 Nombre completo" value={nombre} onChange={e => setNombre(e.target.value)} required />}
           <input style={s.input} type="email" placeholder="✉️ Correo electrónico" value={correo} onChange={e => setCorreo(e.target.value)} required />
           <input style={s.input} type="password" placeholder="🔒 Contraseña" value={password} onChange={e => setPassword(e.target.value)} required />
           {error && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "0.6rem 1rem", borderRadius: "8px", fontSize: "0.85rem", fontWeight: "500" }}>⚠️ {error}</div>}
-          <button style={{ padding: "0.85rem", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", border: "none", borderRadius: "12px", cursor: "pointer", fontWeight: "700", fontSize: "1rem", marginTop: "0.25rem", boxShadow: "0 4px 15px rgba(99,102,241,0.4)" }} type="submit">
+          <button style={{ padding: "0.85rem", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", border: "none", borderRadius: "12px", cursor: "pointer", fontWeight: "700", fontSize: "1rem", boxShadow: "0 4px 15px rgba(99,102,241,0.4)" }} type="submit">
             {modo === "login" ? "🚀 Entrar" : "✨ Crear cuenta"}
           </button>
         </form>
-
         <div style={{ marginTop: "1.25rem", padding: "0.75rem", background: "#f8fafc", borderRadius: "10px", fontSize: "0.78rem", color: "#6b7280" }}>
           <p style={{ margin: "0 0 0.25rem", fontWeight: "600", color: "#374151" }}>Usuarios de prueba:</p>
           <p style={{ margin: "0.1rem 0" }}>👑 Admin: admin@quizmaster.com / Admin123</p>
@@ -195,7 +198,6 @@ function CategoryView({ categorias, onSelect, onLoad, user }) {
   useEffect(() => { onLoad(); }, []);
   const hora = new Date().getHours();
   const saludo = hora < 12 ? "Buenos días" : hora < 18 ? "Buenas tardes" : "Buenas noches";
-
   return (
     <div style={{ maxWidth: "700px", margin: "0 auto", padding: "2rem 1rem" }}>
       <div style={{ marginBottom: "2rem", textAlign: "center" }}>
@@ -203,7 +205,6 @@ function CategoryView({ categorias, onSelect, onLoad, user }) {
         <h2 style={{ margin: 0, fontSize: "1.6rem", fontWeight: "900", color: "#1e1b4b" }}>{user?.nombre} 👋</h2>
         <p style={{ margin: "0.5rem 0 0", color: "#6b7280" }}>¿Qué quieres practicar hoy?</p>
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         {categorias.map((c, i) => {
           const col = catColors[i % catColors.length];
@@ -224,7 +225,7 @@ function CategoryView({ categorias, onSelect, onLoad, user }) {
   );
 }
 
-function GameView({ sesion, resultado, selected, loading, onResponder, onSiguiente, onFin, historial }) {
+function GameView({ sesion, resultado, selected, loading, onResponder, onSiguiente, onFin, historial, recs }) {
   if (!sesion?.pregunta_actual && sesion?.estado !== "completada") {
     return (
       <div style={{ maxWidth: "600px", margin: "3rem auto", padding: "0 1rem" }}>
@@ -246,7 +247,6 @@ function GameView({ sesion, resultado, selected, loading, onResponder, onSiguien
           <div style={{ fontSize: "5rem", marginBottom: "0.5rem" }}>{emoji}</div>
           <h2 style={{ margin: "0 0 0.25rem", color: "#1e1b4b", fontSize: "1.5rem", fontWeight: "900" }}>{msg}</h2>
           <p style={{ color: "#6b7280", margin: "0 0 1.5rem" }}>Sesión completada</p>
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
             {[
               { label: "Puntuación", value: sesion.puntuacion, icon: "⭐", color: "#6366f1", bg: "#ede9fe" },
@@ -260,8 +260,7 @@ function GameView({ sesion, resultado, selected, loading, onResponder, onSiguien
               </div>
             ))}
           </div>
-
-          <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", maxHeight: "220px", overflowY: "auto" }}>
+          <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "0.75rem", marginBottom: "1.25rem", maxHeight: "200px", overflowY: "auto", textAlign: "left" }}>
             {historial.map((h, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.4rem 0.5rem", borderBottom: i < historial.length - 1 ? "1px solid #f0f0f0" : "none", fontSize: "0.83rem" }}>
                 <span style={{ width: "20px", textAlign: "center" }}>{h.correcta ? "✅" : "❌"}</span>
@@ -271,6 +270,17 @@ function GameView({ sesion, resultado, selected, loading, onResponder, onSiguien
               </div>
             ))}
           </div>
+          {recs && recs.length > 0 && (
+            <div style={{ marginBottom: "1rem", background: "#ede9fe", borderRadius: "14px", padding: "1rem 1.25rem", textAlign: "left" }}>
+              <p style={{ margin: "0 0 0.75rem", fontWeight: "800", color: "#5b21b6", fontSize: "0.95rem" }}>🤖 Recomendaciones del Agente IA</p>
+              {recs.map((r, i) => (
+                <div key={i} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", alignItems: "flex-start" }}>
+                  <span style={{ fontSize: "1rem" }}>{i === 0 ? "💡" : i === 1 ? "📚" : "🎯"}</span>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#4c1d95", lineHeight: "1.5" }}>{r.texto}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <button style={s.btnPrimary} onClick={onFin}>🎮 Jugar de nuevo</button>
         </div>
       </div>
@@ -279,41 +289,29 @@ function GameView({ sesion, resultado, selected, loading, onResponder, onSiguien
 
   const pregunta = sesion.pregunta_actual;
   const difConfig = {
-    facil:   { color: "#22c55e", bg: "#dcfce7", label: "Fácil" },
-    media:   { color: "#f59e0b", bg: "#fef9c3", label: "Media" },
+    facil: { color: "#22c55e", bg: "#dcfce7", label: "Fácil" },
+    media: { color: "#f59e0b", bg: "#fef9c3", label: "Media" },
     dificil: { color: "#ef4444", bg: "#fee2e2", label: "Difícil" },
   }[sesion.dificultad_actual] || { color: "#6366f1", bg: "#ede9fe", label: "?" };
-
   const letras = ["A", "B", "C", "D"];
 
   return (
     <div style={{ maxWidth: "600px", margin: "0 auto", padding: "1.5rem 1rem" }}>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span style={{ fontSize: "1.3rem" }}>⭐</span>
           <span style={{ fontWeight: "900", color: "#1e1b4b", fontSize: "1.2rem" }}>{sesion.puntuacion}</span>
         </div>
-        <span style={{ color: "#6b7280", fontSize: "0.85rem", fontWeight: "500" }}>
-          Pregunta <b>{sesion.preguntas_respondidas + 1}</b> de 10
-        </span>
-        <div style={{ background: difConfig.bg, color: difConfig.color, padding: "4px 12px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "700" }}>
-          {difConfig.label}
-        </div>
+        <span style={{ color: "#6b7280", fontSize: "0.85rem", fontWeight: "500" }}>Pregunta <b>{sesion.preguntas_respondidas + 1}</b> de 10</span>
+        <div style={{ background: difConfig.bg, color: difConfig.color, padding: "4px 12px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "700" }}>{difConfig.label}</div>
       </div>
-
-      {/* Barra progreso */}
       <div style={{ height: "8px", background: "#e5e7eb", borderRadius: "4px", marginBottom: "1.5rem", overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${(sesion.preguntas_respondidas / 10) * 100}%`, background: `linear-gradient(90deg, #6366f1, #8b5cf6)`, borderRadius: "4px", transition: "width 0.4s" }} />
+        <div style={{ height: "100%", width: `${(sesion.preguntas_respondidas / 10) * 100}%`, background: "linear-gradient(90deg, #6366f1, #8b5cf6)", borderRadius: "4px", transition: "width 0.4s" }} />
       </div>
-
-      {/* Tarjeta pregunta */}
       <div style={{ background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)", borderRadius: "20px", padding: "1.75rem", marginBottom: "1rem", boxShadow: "0 8px 32px rgba(30,27,75,0.3)" }}>
         <p style={{ margin: 0, color: "rgba(255,255,255,0.7)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>¿Cuál es la respuesta correcta?</p>
         <h2 style={{ margin: 0, color: "#fff", fontSize: "1.15rem", fontWeight: "700", lineHeight: "1.5" }}>{pregunta.enunciado}</h2>
       </div>
-
-      {/* Opciones */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
         {pregunta.opciones.map((op, i) => {
           let bg = "#fff", border = "#e5e7eb", color = "#374151", shadow = "0 2px 8px rgba(0,0,0,0.06)";
@@ -331,20 +329,13 @@ function GameView({ sesion, resultado, selected, loading, onResponder, onSiguien
           );
         })}
       </div>
-
-      {/* Feedback */}
       {resultado && (
         <div style={{ marginTop: "1rem", padding: "1rem 1.25rem", borderRadius: "14px", background: resultado.es_correcta ? "#dcfce7" : "#fee2e2", border: `2px solid ${resultado.es_correcta ? "#22c55e" : "#ef4444"}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <p style={{ margin: 0, fontWeight: "800", color: resultado.es_correcta ? "#166534" : "#991b1b", fontSize: "1rem" }}>
-              {resultado.es_correcta ? "✅ ¡Correcto!" : "❌ Incorrecto"}
-            </p>
-            <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", color: resultado.es_correcta ? "#166534" : "#991b1b", opacity: 0.8 }}>
-              {resultado.es_correcta ? `+${resultado.puntos_obtenidos} puntos` : "Sigue intentando"}
-            </p>
+            <p style={{ margin: 0, fontWeight: "800", color: resultado.es_correcta ? "#166534" : "#991b1b", fontSize: "1rem" }}>{resultado.es_correcta ? "✅ ¡Correcto!" : "❌ Incorrecto"}</p>
+            <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", color: resultado.es_correcta ? "#166534" : "#991b1b", opacity: 0.8 }}>{resultado.es_correcta ? `+${resultado.puntos_obtenidos} puntos` : "Sigue intentando"}</p>
           </div>
-          <button
-            style={{ padding: "0.6rem 1.25rem", background: resultado.es_correcta ? "#22c55e" : "#ef4444", color: "#fff", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "700", fontSize: "0.9rem" }}
+          <button style={{ padding: "0.6rem 1.25rem", background: resultado.es_correcta ? "#22c55e" : "#ef4444", color: "#fff", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "700", fontSize: "0.9rem" }}
             onClick={resultado.sesion_completada ? onFin : onSiguiente}>
             {resultado.sesion_completada ? "Ver resultados →" : "Siguiente →"}
           </button>
@@ -361,14 +352,10 @@ function StatsView({ user }) {
   const medallas = ["🥇", "🥈", "🥉"];
   const formatFecha = (iso) => new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
   const formatTiempo = (iso) => new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-
   if (loading) return <div style={{ textAlign: "center", padding: "4rem", color: "#6b7280" }}>⏳ Cargando estadísticas...</div>;
-
   return (
     <div style={{ maxWidth: "700px", margin: "0 auto", padding: "2rem 1rem" }}>
       <h2 style={{ textAlign: "center", fontWeight: "900", color: "#1e1b4b", fontSize: "1.5rem", marginBottom: "1.5rem" }}>📊 Mis estadísticas</h2>
-
-      {/* Perfil */}
       <div style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", borderRadius: "20px", padding: "1.5rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
         <div style={{ width: "60px", height: "60px", borderRadius: "50%", background: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.8rem", fontWeight: "900", color: "#fff", flexShrink: 0 }}>
           {user.nombre.charAt(0).toUpperCase()}
@@ -378,10 +365,8 @@ function StatsView({ user }) {
           <p style={{ margin: "0.2rem 0 0", color: "rgba(255,255,255,0.75)", fontSize: "0.85rem" }}>{user.rol}</p>
         </div>
       </div>
-
       {stats ? (
         <>
-          {/* Métricas */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
             {[
               { icon: "🎮", label: "Sesiones", value: stats.totalSesiones, color: "#6366f1", bg: "#ede9fe" },
@@ -398,8 +383,6 @@ function StatsView({ user }) {
               </div>
             ))}
           </div>
-
-          {/* Nivel */}
           <div style={{ ...s.card, marginBottom: "1.25rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
               <p style={{ margin: 0, fontWeight: "800", color: "#1e1b4b" }}>Nivel de dominio</p>
@@ -412,8 +395,6 @@ function StatsView({ user }) {
               {stats.precision >= 70 ? "🏆 ¡Experto! Dominas el tema" : stats.precision >= 40 ? "📈 Intermedio — sigue practicando" : "💪 Principiante — ¡tú puedes!"}
             </p>
           </div>
-
-          {/* Historial */}
           <div style={s.card}>
             <p style={{ margin: "0 0 1rem", fontWeight: "800", color: "#1e1b4b" }}>Últimas sesiones</p>
             {sesiones.map((ses, i) => {
@@ -460,7 +441,7 @@ function AdminView() {
       )}
       <div style={{ display: "flex", background: "#f3f4f6", borderRadius: "12px", padding: "4px", marginBottom: "1.5rem", width: "fit-content" }}>
         {[["preguntas", "📝 Preguntas"], ["categorias", "📂 Categorías"]].map(([key, label]) => (
-          <button key={key} style={{ padding: "0.6rem 1.5rem", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "700", fontSize: "0.9rem", transition: "all 0.2s", background: seccion === key ? "#fff" : "transparent", color: seccion === key ? "#6366f1" : "#6b7280", boxShadow: seccion === key ? "0 2px 8px rgba(0,0,0,0.1)" : "none" }} onClick={() => setSeccion(key)}>{label}</button>
+          <button key={key} style={{ padding: "0.6rem 1.5rem", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: "700", fontSize: "0.9rem", background: seccion === key ? "#fff" : "transparent", color: seccion === key ? "#6366f1" : "#6b7280", boxShadow: seccion === key ? "0 2px 8px rgba(0,0,0,0.1)" : "none" }} onClick={() => setSeccion(key)}>{label}</button>
         ))}
       </div>
       {seccion === "preguntas" && <AdminPreguntas admin={admin} />}
@@ -526,7 +507,7 @@ function AdminPreguntas({ admin }) {
         </div>
       )}
       {admin.loading ? <p style={{ color: "#6b7280", textAlign: "center", padding: "2rem" }}>⏳ Cargando...</p>
-        : preguntasFiltradas.length === 0 ? <div style={{ textAlign: "center", padding: "3rem", color: "#6b7280" }}><div style={{ fontSize: "3rem" }}>📝</div><p>No hay preguntas. ¡Crea la primera!</p></div>
+        : preguntasFiltradas.length === 0 ? <div style={{ textAlign: "center", padding: "3rem", color: "#6b7280" }}><div style={{ fontSize: "3rem" }}>📝</div><p>No hay preguntas.</p></div>
         : preguntasFiltradas.map(p => (
           <div key={p.id} style={{ ...s.card, marginBottom: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div style={{ flex: 1, marginRight: "1rem" }}>
@@ -592,7 +573,7 @@ function AdminCategorias({ admin }) {
 function Navbar({ user, onLogout, onHome, onAdmin, onStats }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.85rem 1.5rem", background: "#fff", boxShadow: "0 2px 12px rgba(0,0,0,0.08)", flexWrap: "wrap", gap: "0.5rem", position: "sticky", top: 0, zIndex: 50 }}>
-      <span onClick={onHome} style={{ fontWeight: "900", fontSize: "1.1rem", color: "#1e1b4b", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}>🎯 QuizMaster IA</span>
+      <span onClick={onHome} style={{ fontWeight: "900", fontSize: "1.1rem", color: "#1e1b4b", cursor: "pointer" }}>🎯 QuizMaster IA</span>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={onStats} style={{ padding: "0.4rem 0.9rem", border: "1.5px solid #e5e7eb", borderRadius: "20px", background: "#fff", cursor: "pointer", color: "#374151", fontWeight: "600", fontSize: "0.85rem" }}>📊 Stats</button>
         {user.rol === "administrador" && <button onClick={onAdmin} style={{ padding: "0.4rem 0.9rem", border: "none", borderRadius: "20px", background: "#ede9fe", cursor: "pointer", color: "#6366f1", fontWeight: "700", fontSize: "0.85rem" }}>⚙️ Admin</button>}
@@ -616,7 +597,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
       <Navbar user={auth.user} onLogout={auth.logout} onHome={goHome} onAdmin={() => setView("admin")} onStats={() => setView("stats")} />
       {view === "home" && <CategoryView categorias={game.categorias} onLoad={game.cargarCategorias} user={auth.user} onSelect={async (id) => { await game.iniciar(id); setView("game"); }} />}
-      {view === "game" && <GameView sesion={game.sesion} resultado={game.resultado} selected={game.selected} loading={game.loading} historial={game.historial} onResponder={game.responder} onSiguiente={game.siguiente} onFin={goHome} />}
+      {view === "game" && <GameView sesion={game.sesion} resultado={game.resultado} selected={game.selected} loading={game.loading} historial={game.historial} recs={game.recs} onResponder={game.responder} onSiguiente={game.siguiente} onFin={goHome} />}
       {view === "admin" && <AdminView />}
       {view === "stats" && <StatsView user={auth.user} />}
     </div>
